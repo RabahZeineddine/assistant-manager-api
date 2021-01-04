@@ -1,5 +1,5 @@
 applications:
-  - name: <app-name>
+  - name: assistant-manager-api
     path: .
     memory: 128M
     instances: 1
