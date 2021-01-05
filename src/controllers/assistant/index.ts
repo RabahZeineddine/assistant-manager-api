@@ -7,6 +7,7 @@ import json2xls from 'json2xls'
 import File from '../../models/File'
 import Joi from '@hapi/joi'
 import { xslxCredentialsSchemas } from './schemas'
+import { Helper } from '../../utils/Helper'
 
 export class AssistantController {
 
@@ -20,7 +21,6 @@ export class AssistantController {
     async testSkill(file: File) {
         const result = this.getDataFromExcel(file)
         const credentials = await this.getCredentials(result)
-        console.log(JSON.stringify(credentials, null, 2))
         this.assistantV1 = CustomAssistantV1(credentials.ASSISTANT)
         const dialog: Array<any> = this.parseExcelJson(result)
 
@@ -48,10 +48,13 @@ export class AssistantController {
             const assistantOutputs = assistantResult.result?.output?.text
             if (assistantOutputs) {
                 let valid = false
+                let validOutputsCount = 0
                 assistantOutputs.forEach((output: string, innerIndex: number) => {
                     if (interaction.output?.[innerIndex]?.indexOf(output.trim()) != -1
-                        && assistantOutputs.length == interaction.output.length) valid = true
+                        && assistantOutputs.length == interaction.output.length) validOutputsCount++
                 })
+                if (validOutputsCount == assistantOutputs.length) valid = true
+
                 interaction.status = valid ? 'aprovado' : 'reprovado'
                 interaction.currentOutput = assistantOutputs
                 interaction.outputContext = assistantResult.result.context
@@ -61,7 +64,6 @@ export class AssistantController {
 
             finalResult.push(interaction)
         }
-
         const output = await this.writeOutputToExcel(finalResult)
         return output
     }
@@ -106,6 +108,7 @@ export class AssistantController {
         data?.dialog.forEach((line: any) => {
             if (line['disabled'] != 'TRUE') {
                 if (line.id && line.input) {
+                    if (Object.keys(interaction).length > 0) result.push(Helper.clone(interaction))
                     interaction = {
                         id: line.id,
                         parentId: line['parent-id'],
@@ -132,13 +135,10 @@ export class AssistantController {
                     }
                 }
 
-                if (interaction.id && interaction.input && interaction.output) result.push(interaction)
             }
-
         })
 
-        console.log(result)
-
+        if (Object.keys(interaction).length > 0 && result[result.length - 1] != interaction) result.push(Helper.clone(interaction))
         return result
     }
 
@@ -159,7 +159,7 @@ export class AssistantController {
     async writeOutputToExcel(result: Array<any>) {
         result = result.reduce((acc: Array<any>, curr: any) => {
             const rows: Array<any> = []
-            const firstRow: any = JSON.parse(JSON.stringify(curr))
+            const firstRow: any = Helper.clone(curr)
             delete firstRow.output
             delete firstRow.currentOutput
             delete firstRow.outputContext
@@ -179,6 +179,7 @@ export class AssistantController {
                         currentRow++
                     }
                 })
+                if (items.length == 1 && curr.output.length > 1) currentRow++
             })
 
             while (currentOutputIndex < curr.currentOutput.length) {
@@ -187,11 +188,10 @@ export class AssistantController {
                 currentOutputIndex++
                 currentRow++
             }
-
-
             acc = acc.concat(rows)
             return acc
         }, [])
+
         const xlsx = json2xls(result.map((row) => ({
             id: row.id,
             parentId: row.parentId,
