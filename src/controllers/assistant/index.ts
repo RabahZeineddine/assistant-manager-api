@@ -8,6 +8,7 @@ import File from '../../models/File'
 import Joi from '@hapi/joi'
 import { xslxCredentialsSchemas } from './schemas'
 import { Helper } from '../../utils/Helper'
+import Logger from '../../utils/Logger'
 
 export class AssistantController {
 
@@ -50,7 +51,7 @@ export class AssistantController {
                 let valid = false
                 let validOutputsCount = 0
                 assistantOutputs.forEach((output: string, innerIndex: number) => {
-                    if (interaction.output?.[innerIndex]?.indexOf(output.trim()) != -1
+                    if (interaction.output?.[innerIndex]?.indexOf(this.cleanText(output)) != -1
                         && assistantOutputs.length == interaction.output.length) validOutputsCount++
                 })
                 if (validOutputsCount == assistantOutputs.length) valid = true
@@ -66,6 +67,15 @@ export class AssistantController {
         }
         const output = await this.writeOutputToExcel(finalResult)
         return output
+    }
+
+    private cleanText(text: string) {
+        try {
+            return text.replace(new RegExp(/\n|\r|\t/g), '').trim()
+        } catch (error) {
+            Logger.error(error)
+            return text
+        }
     }
 
     private getDataFromExcel(file: File) {
@@ -112,7 +122,7 @@ export class AssistantController {
                     interaction = {
                         id: line.id,
                         parentId: line['parent-id'],
-                        input: line.input?.trim()
+                        input: this.cleanText(line.input)
                     }
                 }
 
@@ -120,18 +130,18 @@ export class AssistantController {
                     if (!interaction.output) interaction.output = []
                     const outputIndex: number = interaction.output.length
                     if (!interaction.output[outputIndex]) interaction.output[outputIndex] = []
-                    interaction.output[outputIndex].push(line.output.trim())
+                    interaction.output[outputIndex].push(this.cleanText(line.output))
                 }
 
                 if (line['output-variation']) {
-                    if (interaction.output && interaction.output.length > 0) interaction.output[interaction.output.length - 1].push(line['output-variation'].trim())
+                    if (interaction.output && interaction.output.length > 0) interaction.output[interaction.output.length - 1].push(this.cleanText(line['output-variation']))
                 }
                 if (line.context) {
                     try {
                         const context = JSON.parse(line.context)
                         interaction.context = context
                     } catch (error) {
-                        console.error(error)
+                        Logger.error('Invalid Context')
                     }
                 }
 
@@ -151,7 +161,7 @@ export class AssistantController {
             })
             return response
         } catch (error) {
-            console.error(error)
+            Logger.error(error)
             throw error
         }
     }
