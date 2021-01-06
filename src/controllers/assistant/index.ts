@@ -52,7 +52,7 @@ export class AssistantController {
                 let validOutputsCount = 0
                 assistantOutputs.forEach((output: string, innerIndex: number) => {
                     if (interaction.output?.[innerIndex]?.indexOf(this.cleanText(output)) != -1
-                        && assistantOutputs.length == interaction.output.length) validOutputsCount++
+                        && assistantOutputs.length == interaction.output?.length) validOutputsCount++
                 })
                 if (validOutputsCount == assistantOutputs.length) valid = true
 
@@ -176,7 +176,7 @@ export class AssistantController {
             rows.push(firstRow)
             let currentRow = 0
             let currentOutputIndex = 0
-            curr.output.forEach((items: Array<any>) => {
+            curr.output?.forEach((items: Array<any>) => {
                 items.forEach((item: any, index: number) => {
                     while (currentRow > rows.length - 1) rows.push({})
                     if (index == 0) {
