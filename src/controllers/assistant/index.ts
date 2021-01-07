@@ -35,7 +35,7 @@ export class AssistantController {
             try {
 
 
-                let inputContext: any = interaction['input-context'] || {}
+                let inputContext: any = interaction.inputContext || {}
                 if (interaction.parentId) {
                     const parentInteraction = dialog.find((item) => item.id == interaction.parentId)
                     if (parentInteraction && parentInteraction.outputContext) {
