@@ -31,36 +31,56 @@ export class AssistantController {
         for (let i = 0; i < dialog.length; i++) {
             const interaction = dialog[i]
 
-            let inputContext: any = interaction.context || {}
-            if (interaction.parentId) {
-                const parentInteraction = dialog.find((item) => item.id == interaction.parentId)
-                if (parentInteraction && parentInteraction.outputContext) {
-                    inputContext = { ...parentInteraction.outputContext, ...inputContext }
+
+            try {
+
+
+                let inputContext: any = interaction['input-context'] || {}
+                if (interaction.parentId) {
+                    const parentInteraction = dialog.find((item) => item.id == interaction.parentId)
+                    if (parentInteraction && parentInteraction.outputContext) {
+                        inputContext = { ...parentInteraction.outputContext, ...inputContext }
+                    }
                 }
-            }
-            const assistantResult = await this.messageV1(
-                { text: interaction.input },
-                inputContext,
-                credentials.ASSISTANT.SKILL_ID
-            )
 
-            interaction.status = ''
-            if (assistantResult.status != 200) interaction.error = assistantResult.result
-            const assistantOutputs = assistantResult.result?.output?.text
-            if (assistantOutputs) {
-                let valid = false
-                let validOutputsCount = 0
-                assistantOutputs.forEach((output: string, innerIndex: number) => {
-                    if (interaction.output?.[innerIndex]?.indexOf(this.cleanText(output)) != -1
-                        && assistantOutputs.length == interaction.output?.length) validOutputsCount++
-                })
-                if (validOutputsCount == assistantOutputs.length) valid = true
+                const assistantResult = await this.messageV1(
+                    { text: interaction.input },
+                    inputContext,
+                    credentials.ASSISTANT.SKILL_ID
+                )
 
-                interaction.status = valid ? 'aprovado' : 'reprovado'
-                interaction.currentOutput = assistantOutputs
-                interaction.outputContext = assistantResult.result.context
-            } else {
-                // Não deu certo o output
+                interaction.status = ''
+                interaction.inputContext = inputContext
+                if (assistantResult.status != 200) interaction.error = assistantResult.result
+                const assistantOutputs = assistantResult.result?.output?.text
+                const outputContext = assistantResult.result.context
+                if (assistantOutputs) {
+                    let valid = false
+                    let validOutputsCount = 0
+                    assistantOutputs.forEach((output: string, innerIndex: number) => {
+                        if (interaction.output?.[innerIndex]?.indexOf(this.cleanText(output)) != -1
+                            && assistantOutputs.length == interaction.output?.length) validOutputsCount++
+                    })
+                    if (validOutputsCount == assistantOutputs.length) valid = true
+
+                    if (interaction.expectedContext && Object.keys(interaction.expectedContext).length > 0) {
+                        const contextDiff = Object.entries(interaction.expectedContext).every(([key, value]) => {
+                            return outputContext[key] && outputContext[key] === value
+                        })
+                        if (!contextDiff) valid = false
+                    }
+
+                    interaction.status = valid ? 'approved' : 'failed'
+                    interaction.currentOutput = assistantOutputs
+                    interaction.outputContext = outputContext
+                } else {
+                    // Não deu certo o output
+                    throw new Error('No Watson Assistant Output Found!')
+                }
+            } catch (error) {
+                Logger.error(error)
+                interaction.status = 'error'
+                interaction.error = error.toString() || error
             }
 
             finalResult.push(interaction)
@@ -139,12 +159,21 @@ export class AssistantController {
                 if (line['output-variation']) {
                     if (interaction.output && interaction.output.length > 0) interaction.output[interaction.output.length - 1].push(this.cleanText(line['output-variation']))
                 }
-                if (line.context) {
+                if (line['input-context']) {
                     try {
-                        const context = JSON.parse(line.context)
-                        interaction.context = context
+                        const inputContext = JSON.parse(line['input-context'])
+                        interaction.inputContext = inputContext
                     } catch (error) {
-                        Logger.error('Invalid Context')
+                        Logger.error(`Invalid input-context: ${line['input-context']}`)
+                    }
+                }
+
+                if (line['expected-context']) {
+                    try {
+                        const expectedContext = JSON.parse(line['expected-context'])
+                        interaction.expectedContext = expectedContext
+                    } catch (error) {
+                        Logger.error('Invalid expected-context')
                     }
                 }
 
@@ -176,7 +205,6 @@ export class AssistantController {
             const firstRow: any = Helper.clone(curr)
             delete firstRow.output
             delete firstRow.currentOutput
-            delete firstRow.outputContext
             rows.push(firstRow)
             let currentRow = 0
             let currentOutputIndex = 0
@@ -214,6 +242,9 @@ export class AssistantController {
             variation: row.variation,
             currentOutput: row.currentOutput,
             status: row.status,
+            inputContext: row.inputContext,
+            expectedContext: row.expectedContext,
+            outputContext: row.outputContext,
             ...row
         })))
         return xlsx
