@@ -69,9 +69,12 @@ export class AssistantController {
         return output
     }
 
-    private cleanText(text: string) {
+    private cleanText(text: any) {
         try {
-            return text.replace(new RegExp(/\n|\r|\t/g), '').trim()
+            if (typeof text == 'string')
+                return text.replace(new RegExp(/\n|\r|\t/g), '').trim()
+            if (typeof text == 'number') return text.toString()
+            else throw new Error(`${text} is not a string`)
         } catch (error) {
             Logger.error(error)
             return text
@@ -154,6 +157,7 @@ export class AssistantController {
 
     async messageV1(input: any, context: any = {}, workspaceId: string) {
         try {
+            Logger.info(`messageV1 | text: ${input.text}`)
             const response = await this.assistantV1.message({
                 workspaceId: workspaceId || env.ASSISTANT.V1.WORKSPACES.SKILL_ID,
                 input,
